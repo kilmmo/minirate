@@ -1,0 +1,35 @@
+
+syntax = "proto3";
+
+service Feerequest{
+    rpc ReqFeeInfo(station) returns (stream FeeInfo);
+    rpc ReqFilePart(PartInfo) returns (PartData);
+}
+
+
+
+message station{
+    string id=1;
+}
+
+message FeeInfo{
+    string FileName=1;
+    int64 Size=2;
+    string Md5=3;
+}
+
+message PartInfo{
+    string filename=1;
+    int64 partsize=2;
+    int64 partid=3;
+
+
+}
+
+message PartData{
+    bytes data=1;
+
+}
+
+
+option go_package ="/msg";
