@@ -34,13 +34,13 @@ func (s *server) ReqFilePart(ctx context.Context, m *msg.PartInfo) (*msg.PartDat
 	fh, _ := os.Open(m.GetFilename())
 	if m.GetPartsize() == mtu {
 		var data = make([]byte, mtu)
-		fh.ReadAt(data, mtu*(m.GetPartid()-1))
+		fh.ReadAt(data, mtu*m.GetPartid())
 		return &msg.PartData{
 			Data: data,
 		}, nil
 	} else {
 		var data = make([]byte, m.GetPartsize())
-		fh.ReadAt(data, mtu*(m.GetPartid()-1))
+		fh.ReadAt(data, mtu*(m.GetPartid()))
 		return &msg.PartData{
 			Data: data,
 		}, nil

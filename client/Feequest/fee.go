@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"github.com/fenggshu/transport/msg"
@@ -19,22 +18,23 @@ import (
 const mtu = 512 * 1024
 
 func GetLocalIdentity() string {
-	url := "sqlserver://sa:n3amt4@localhost?database=ynstation&connection+timeout=30"
+	url := "sqlserver://ynstation:stn@1522@localhost?database=ynstation&connection+timeout=30"
 	db, err := sql.Open("mssql", url)
-	defer db.Close()
 
 	if err != nil {
 		println("Open Error:", err)
 	}
+	defer db.Close()
 	var a string
 	rows, err := db.Query("select paravalue from ts_sysparadic where para=1;")
-	defer rows.Close()
+
 	if err != nil {
 		fmt.Println(err)
 	}
 	for rows.Next() {
 		rows.Scan(&a)
 	}
+	defer rows.Close()
 
 	return a
 }
@@ -55,7 +55,7 @@ func GetFeeFile(conn *grpc.ClientConn, sid string) []*msg.FeeInfo {
 			break
 		}
 		if err != nil {
-			fmt.Println(feeinfo.GetFileName() + "\t" + strconv.FormatInt(feeinfo.GetSize(), 10) + "\t" + feeinfo.GetMd5())
+			fmt.Println(err)
 		}
 		fis = append(fis, feeinfo)
 	}
@@ -65,12 +65,14 @@ func GetFeeFile(conn *grpc.ClientConn, sid string) []*msg.FeeInfo {
 
 func CheckFile(m *msg.FeeInfo) bool {
 	_, filename := filepath.Split(m.GetFileName())
-	_, err := os.Open(filename)
+	basedir, _ := os.Getwd()
+	_, err := os.Open(filepath.Join(basedir, filename))
 	if err != nil {
 		return false
 	}
 	fstat, _ := os.Stat(filename)
 	if fstat.Size() != m.GetSize() {
+		fmt.Println("size not ok")
 		return false
 	}
 
@@ -78,31 +80,37 @@ func CheckFile(m *msg.FeeInfo) bool {
 
 	hash := md5.New()
 	io.Copy(hash, fh)
-	if hex.EncodeToString(hash.Sum(nil)) != m.GetMd5() {
-		return false
+	if hex.EncodeToString(hash.Sum(nil)) == m.GetMd5() {
+		fmt.Println("Files: " + filename + " found and no need to download")
 	}
 
-	return true
+	return hex.EncodeToString(hash.Sum(nil)) == m.GetMd5()
 
 }
 
 func GetFeeData(conn *grpc.ClientConn, m *msg.FeeInfo) {
+	totalpart := m.GetSize() / mtu
+	if m.GetSize()%mtu != 0 {
+		totalpart = totalpart + 1
+	}
 
-	totalpart := m.GetSize()/mtu + 1
 	fc := msg.NewFeerequestClient(conn)
 loop:
 	var file []*msg.PartData
-	for i := 1; i < int(totalpart)+1; i++ {
+	for i := 0; i < int(totalpart); i++ {
 		var msize int64 = mtu
-		if i == int(totalpart) {
+		if i == int(totalpart)-1 && m.GetSize()%mtu != 0 {
 			msize = m.GetSize() % mtu
 		}
+
 		data, err := fc.ReqFilePart(context.Background(), &msg.PartInfo{
 			Filename: m.GetFileName(),
 			Partsize: msize,
 			Partid:   int64(i),
 		})
+
 		if err != nil {
+			fmt.Println(err)
 			goto loop
 		}
 		file = append(file, data)
